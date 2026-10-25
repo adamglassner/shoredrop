@@ -1,0 +1,7 @@
+build/
+cmd/setup/payload/ShoreDrop.exe
+testsrv/keys/
+testsrv/root/
+testsrv/froot*/
+testsrv/ftp.key
+testsrv/ftp.crt
