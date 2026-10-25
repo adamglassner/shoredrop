@@ -245,6 +245,13 @@ func (p *Pane) navigate(dir string, addHist bool, mode int) {
 		}
 		changed := newDir != p.dir
 		p.dir = newDir
+		if mode == navUser && p.m.statusKind == stError && strings.HasPrefix(p.m.status, "Cannot open") {
+			if p.m.sess != nil {
+				p.m.setStatus(stOK, "Connected to %s (%s)", p.m.sess.params.Host, p.m.sess.fs.Description())
+			} else {
+				p.m.setStatus(stIdle, "Not connected")
+			}
+		}
 		if entries != nil {
 			p.entries = entries
 		}
@@ -522,7 +529,7 @@ func normalizeLocal(input, cur string) string {
 		home, _ := os.UserHomeDir()
 		t = home + t[1:]
 	}
-	t = os.ExpandEnv(strings.ReplaceAll(t, "%", "$"))
+	t = expandWinEnv(t)
 	if len(t) == 2 && t[1] == ':' {
 		t += `\`
 	}
@@ -530,6 +537,31 @@ func normalizeLocal(input, cur string) string {
 		t = filepath.Join(cur, t)
 	}
 	return filepath.Clean(t)
+}
+
+// expandWinEnv expands %NAME% environment variables.
+func expandWinEnv(s string) string {
+	var b strings.Builder
+	for {
+		i := strings.IndexByte(s, '%')
+		if i < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		j := strings.IndexByte(s[i+1:], '%')
+		if j < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		name := s[i+1 : i+1+j]
+		if v, ok := os.LookupEnv(name); ok && name != "" {
+			b.WriteString(s[:i])
+			b.WriteString(v)
+		} else {
+			b.WriteString(s[:i+j+2])
+		}
+		s = s[i+j+2:]
+	}
 }
 
 func shellOpen(target string) {

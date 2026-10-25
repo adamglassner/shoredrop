@@ -150,6 +150,12 @@ func install(payload []byte, dir string, desktop bool, version string) error {
 }
 
 func uninstall(dir string, removeData bool) error {
+	// Remove the program first so nothing else is touched if it's still running.
+	for _, f := range []string{"ShoreDrop.exe", "ShoreDrop.exe.old"} {
+		if err := os.Remove(filepath.Join(dir, f)); err != nil && !os.IsNotExist(err) {
+			return errors.New("ShoreDrop is running. Close it and try again")
+		}
+	}
 	os.Remove(filepath.Join(startMenuDir(), "ShoreDrop.lnk"))
 	os.Remove(filepath.Join(desktopDir(), "ShoreDrop.lnk"))
 	pRegDeleteTreeW.Call(0x80000001, up(uninstallKey))
@@ -157,11 +163,6 @@ func uninstall(dir string, removeData bool) error {
 		sites := core.LoadSites()
 		sites.ForgetAllPasswords()
 		os.RemoveAll(core.ConfigDir())
-	}
-	for _, f := range []string{"ShoreDrop.exe", "ShoreDrop.exe.old"} {
-		if err := os.Remove(filepath.Join(dir, f)); err != nil && !os.IsNotExist(err) {
-			return errors.New("ShoreDrop is running. Close it and try again")
-		}
 	}
 	// The uninstaller can't delete itself while running: remove the folder
 	// shortly after this process exits.
