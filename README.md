@@ -1,15 +1,17 @@
 # ShoreDrop 1.0.0
 
-A modern FTP, FTPS and SFTP client for Windows with a dual-pane browser, transfer
-queue, site manager, synchronized browsing and full light/dark themes.
+A modern FTP, FTPS and SFTP client for Windows and macOS (Apple Silicon) with a
+dual-pane browser, transfer queue, site manager, synchronized browsing and full
+light/dark themes.
 
-ShoreDrop is a native Win32 application written in Go with **no third-party
+ShoreDrop is a native application written in Go with **no third-party
 dependencies**: the SSH/SFTP and FTP/FTPS protocol code, the UI toolkit, the icon
-and the installer are all in this repository. The result is a single
-self-contained `ShoreDrop.exe` — users don't need Python, Node, .NET or anything
-else installed.
+and the installer are all in this repository. On Windows it is a single
+self-contained `ShoreDrop.exe` (Win32 + GDI+); on macOS it is `ShoreDrop.app`
+(AppKit, Core Graphics and Core Text). Users don't need Python, Node, .NET or
+anything else installed.
 
-## Install (end users)
+## Install on Windows
 
 1. Run **ShoreDrop-Setup.exe**.
 2. Keep the default location (`%LOCALAPPDATA%\Programs\ShoreDrop`) or choose another, and click **Install**.
@@ -23,6 +25,22 @@ Uninstall from **Settings › Apps › Installed apps › ShoreDrop › Uninstal
 Because the exe isn't code-signed, Windows SmartScreen may show "Windows protected
 your PC" the first time; click **More info › Run anyway**. (Signing with a code-signing
 certificate removes this; see below.)
+
+## Install on macOS (Apple Silicon, macOS 11 Big Sur or later)
+
+1. Unzip **ShoreDrop-1.0.0-macOS-arm64.zip** and drag **ShoreDrop.app** into **Applications**.
+2. The app is ad-hoc signed, not notarized by Apple, so the first launch is blocked.
+   Allow it once, either way:
+   - **System Settings › Privacy & Security**, scroll down to "ShoreDrop was blocked…"
+     and click **Open Anyway** (on macOS 14 or earlier you can also right-click the app
+     and choose **Open**), or
+   - in Terminal: `xattr -dr com.apple.quarantine /Applications/ShoreDrop.app`
+     (use this one if macOS says the app "is damaged").
+3. Saved site passwords go to your login Keychain. The first time ShoreDrop reads one,
+   macOS may ask to allow access — choose **Always Allow**.
+
+Settings live in `~/Library/Application Support/ShoreDrop`. To uninstall, drag the app to
+the Trash (and delete that folder to remove settings).
 
 ## Build on Windows
 
@@ -42,12 +60,25 @@ To build from Linux or macOS instead, run `./build.sh` (same outputs).
 Optional code signing: `signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 build\ShoreDrop.exe`
 before building the installer, then sign `build\ShoreDrop-Setup.exe` as well.
 
-## macOS
+## Build for macOS
 
-Not built yet. The protocol, queue, settings and credential code (`internal/core`,
-`internal/remote`, `internal/sshc`, `internal/sftp`, `internal/ftpc`) is portable and
-already includes macOS Keychain support; a macOS version needs a native Cocoa UI
-layer in place of `internal/ui` (which is Win32-specific) and an `.app` bundle.
+On a Mac (Apple Silicon) with Go 1.24+ and the Xcode Command Line Tools
+(`xcode-select --install`):
+
+```sh
+./build-mac.sh
+```
+
+This writes `build/mac/ShoreDrop.app` (ad-hoc signed with `codesign`) and
+`build/ShoreDrop-1.0.0-macOS-arm64.zip`.
+
+The same script cross-compiles from Linux with clang/lld and a macOS SDK:
+`MACOS_SDK=/path/to/MacOSX14.5.sdk ./build-mac.sh` (it signs with
+[rcodesign](https://github.com/indygreg/apple-platform-rs) when that is on the `PATH`).
+
+To ship without the Gatekeeper prompt, sign with a Developer ID certificate and
+notarize, for example `codesign --deep --options runtime --sign "Developer ID Application: …"`
+followed by `xcrun notarytool submit … --wait` and `xcrun stapler staple ShoreDrop.app`.
 
 ## Features
 
@@ -72,14 +103,19 @@ layer in place of `internal/ui` (which is Win32-specific) and an `.app` bundle.
 - **Transfer log** with protocol traffic (passwords masked).
 - **Light, dark and Follow System** themes (menu, Settings, Ctrl+T), remembered between runs;
   every text colour is checked for WCAG AA contrast in `internal/ui/theme_test.go`.
-- **Security:** saved passwords go to Windows Credential Manager (target
-  `ShoreDrop/site/<id>`), never to a file. SSH host keys and FTPS certificates are verified
+- **Security:** saved passwords go to Windows Credential Manager or the macOS Keychain
+  (target / service `ShoreDrop/site/<id>`), never to a file. SSH host keys and FTPS certificates are verified
   and remembered, with warnings if they change. Plain FTP shows an "unencrypted" warning
   with a one-click switch to FTPS.
 
-Settings live in `%APPDATA%\ShoreDrop` (`settings.json`, `sites.json`, `trust.json`).
+Settings live in `%APPDATA%\ShoreDrop` on Windows and `~/Library/Application Support/ShoreDrop`
+on macOS (`settings.json`, `sites.json`, `trust.json`).
 
-## Keyboard shortcuts
+On macOS the menus are in the menu bar, the window has the standard traffic-light
+buttons, icons are SF Symbols, deleted local files go to the Trash, and Control-click
+opens context menus.
+
+## Keyboard shortcuts (Windows)
 
 | Keys | Action | Keys | Action |
 |---|---|---|---|
@@ -93,6 +129,21 @@ Settings live in `%APPDATA%\ShoreDrop` (`settings.json`, `sites.json`, `trust.js
 | Alt+← / Alt+→ | Back / forward | Ctrl+H | Hidden files |
 | Ctrl+L | Type a path | Ctrl+, | Settings |
 | Ctrl+F | Filter | F1 | Shortcut list |
+
+## Keyboard shortcuts (macOS)
+
+| Keys | Action | Keys | Action |
+|---|---|---|---|
+| ⌘R | Refresh | ⌘S | Site Manager |
+| ⌘U | Upload selected | ⌘K | Quick Connect |
+| ⌘D | Download selected | ⌘E | Disconnect |
+| F2 | Rename | ⇧⌘R | Reconnect |
+| ⌘⌫ | Move to Trash / delete | ⌘Y | Synchronized browsing |
+| ⇧⌘N | New folder | ⌘P / ⇧⌘P | Pause / resume all |
+| ⌘↑ or ⌫ | Up one level | ⌘T | Toggle light/dark |
+| ⌘[ / ⌘] | Back / forward | ⇧⌘. | Hidden files |
+| ⇧⌘G | Type a path | ⌘, | Settings |
+| ⌘F | Filter | ⌘? | Shortcut list |
 
 ## Tests
 
@@ -115,9 +166,12 @@ cmd/setup       installer entry point (embeds payload/ShoreDrop.exe)
 internal/sshc   SSH-2 client      internal/sftp  SFTP v3 client
 internal/ftpc   FTP/FTPS client   internal/remote  common FS interface
 internal/core   settings, sites, credentials, transfer queue, log
-internal/ui     Win32 UI toolkit, windows, dialogs, installer UI
+internal/ui     UI toolkit, windows, dialogs (shared), with *_windows.go (Win32/GDI+,
+                installer UI) and *_darwin.go + mac_darwin.m (AppKit) back ends
 internal/logo   logo geometry + icon rasterizer
 tools/mkres     icon/manifest/version-info resource generator
+tools/mkicns    macOS app icon (.icns) generator
+tools/macapp    assembles and zips ShoreDrop.app
 tools/testftpd  local FTP/FTPS test server
 testsrv         integration-test servers (Python)
 ```

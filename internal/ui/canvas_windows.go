@@ -62,15 +62,6 @@ func argb(c Color) uintptr {
 
 type ptf struct{ X, Y float32 }
 
-// Rect is an integer rectangle in device pixels.
-type Rect struct{ X, Y, W, H int }
-
-func (r Rect) Contains(x, y int) bool { return x >= r.X && y >= r.Y && x < r.X+r.W && y < r.Y+r.H }
-func (r Rect) Inset(dx, dy int) Rect  { return Rect{r.X + dx, r.Y + dy, r.W - 2*dx, r.H - 2*dy} }
-func (r Rect) Right() int             { return r.X + r.W }
-func (r Rect) Bottom() int            { return r.Y + r.H }
-func (r Rect) Empty() bool            { return r.W <= 0 || r.H <= 0 }
-
 // Canvas draws onto a GDI device context with GDI+ for anti-aliased shapes
 // and GDI for ClearType text.
 type Canvas struct {
@@ -119,18 +110,6 @@ func (c *Canvas) applyClip() {
 	pSaveDC.Call(c.hdc)
 	pIntersectClipRect.Call(c.hdc, uintptr(r.X), uintptr(r.Y), uintptr(r.X+r.W), uintptr(r.Y+r.H))
 	gpSetClipRect.Call(c.g, f32(float64(r.X)), f32(float64(r.Y)), f32(float64(r.W)), f32(float64(r.H)), 0)
-}
-
-func intersect(a, b Rect) Rect {
-	x1, y1 := max(a.X, b.X), max(a.Y, b.Y)
-	x2, y2 := min(a.X+a.W, b.X+b.W), min(a.Y+a.H, b.Y+b.H)
-	if x2 < x1 {
-		x2 = x1
-	}
-	if y2 < y1 {
-		y2 = y1
-	}
-	return Rect{x1, y1, x2 - x1, y2 - y1}
 }
 
 func (c *Canvas) brush(col Color) uintptr {
@@ -258,13 +237,6 @@ func (c *Canvas) Polygon(pts [][2]float64, col Color) {
 	gpFillPolygon.Call(c.g, b, uintptr(unsafe.Pointer(&ps[0])), uintptr(len(ps)), 0)
 	gpDeleteBrush.Call(b)
 }
-
-// Text alignment flags.
-const (
-	AlignLeft   = 0
-	AlignCenter = 1
-	AlignRight  = 2
-)
 
 // Text draws single-line text vertically centred in r, with ellipsis.
 func (c *Canvas) Text(s string, f *Font, col Color, r Rect, align int) {

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 package ui
 
@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"syscall"
-	"unsafe"
 
 	"shoredrop/internal/core"
 )
@@ -89,6 +87,7 @@ func (d *Dialog) layout() {
 	w.CaptionH = d.headerH
 	cs := w.S(46)
 	d.closeBtn.SetBounds(Rect{w.w - cs, 0, cs, w.S(36)})
+	d.closeBtn.Show(!nativeChrome)
 	x := w.w - w.S(20)
 	for i := len(d.Buttons) - 1; i >= 0; i-- {
 		b := d.Buttons[i]
@@ -115,11 +114,11 @@ func (d *Dialog) paint(c *Canvas) {
 	c.FillRect(Rect{0, d.headerH - 1, w.w, 1}, p.Border)
 	if d.BigHeader {
 		lh := w.S(50)
-		drawBrand(c, w, w.S(22), (d.headerH-lh)/2, lh, d.Title, true)
+		drawBrand(c, w, w.ChromeL+w.S(22), (d.headerH-lh)/2, lh, d.Title, true)
 	} else {
 		ls := w.S(28)
-		drawLogo(c, w.S(18), (d.headerH-ls)/2, ls, p.Logo)
-		c.Text(d.Title, w.F.Title, p.TitleText, Rect{w.S(58), 0, w.w - w.S(120), d.headerH}, AlignLeft)
+		drawLogo(c, w.ChromeL+w.S(18), (d.headerH-ls)/2, ls, p.Logo)
+		c.Text(d.Title, w.F.Title, p.TitleText, Rect{w.ChromeL + w.S(58), 0, w.w - w.ChromeL - w.S(120), d.headerH}, AlignLeft)
 	}
 	if !d.NoFooter {
 		fy := w.h - d.footerH
@@ -153,19 +152,6 @@ func (d *Dialog) Run() int {
 	}
 	d.ShowModal()
 	return d.Result
-}
-
-// measureWrap returns the height of word-wrapped text at width w.
-func measureWrap(f *Font, text string, w int) int {
-	if text == "" {
-		return 0
-	}
-	u, _ := syscall.UTF16FromString(text)
-	old, _, _ := pSelectObject.Call(measureDC, f.h)
-	rc := RECT{0, 0, int32(w), 0}
-	pDrawTextW.Call(measureDC, uintptr(unsafe.Pointer(&u[0])), uintptr(len(u)-1), uintptr(unsafe.Pointer(&rc)), DT_WORDBREAK|DT_CALCRECT|DT_NOPREFIX)
-	pSelectObject.Call(measureDC, old)
-	return int(rc.Bottom)
 }
 
 // Message kinds.
@@ -441,7 +427,7 @@ func (a *App) About(owner *Window) {
 		c.Text("A modern FTP, FTPS and SFTP client.", d.F.Body, p.Text2, Rect{r.X, r.Y + d.S(198), r.W, d.S(22)}, AlignCenter)
 		c.Text("Saved passwords are kept in "+core.CredentialStoreName+".", d.F.Small, p.Text2, Rect{r.X, r.Y + d.S(226), r.W, d.S(20)}, AlignCenter)
 		c.Text("Settings: "+core.ConfigDir(), d.F.Small, p.Text3, Rect{r.X + d.S(20), r.Y + d.S(252), r.W - d.S(40), d.S(20)}, AlignCenter)
-		c.Text("Keyboard shortcuts: press F1 in the main window.", d.F.Small, p.Text3, Rect{r.X, r.Y + d.S(276), r.W, d.S(20)}, AlignCenter)
+		c.Text("Keyboard shortcuts: press "+helpShortcut+" in the main window.", d.F.Small, p.Text3, Rect{r.X, r.Y + d.S(276), r.W, d.S(20)}, AlignCenter)
 	}
 	d.Run()
 }

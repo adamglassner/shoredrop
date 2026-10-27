@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 package ui
 
@@ -477,7 +477,7 @@ func (sm *siteMgr) save() {
 		pw := sm.pass.Text()
 		if s.Logon == core.LogonNormal && pw != "" {
 			if err := core.Credentials.Set(s.CredentialTarget(), s.User, pw); err != nil {
-				sm.m.app.Alert(sm.d.Window, MsgError, "Could not save the password", "Windows Credential Manager refused the password: "+err.Error())
+				sm.m.app.Alert(sm.d.Window, MsgError, "Could not save the password", "ShoreDrop could not store the password in "+core.CredentialStoreName+": "+err.Error())
 			}
 		} else {
 			core.Credentials.Delete(s.CredentialTarget())

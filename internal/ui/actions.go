@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 package ui
 
@@ -8,8 +8,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
-	"unsafe"
 
 	"shoredrop/internal/core"
 	"shoredrop/internal/remote"
@@ -440,17 +438,17 @@ func (m *MainWindow) deleteSelected(p *Pane) {
 	if p.dir == "" {
 		return
 	}
-	if m.S.ConfirmDelete && !m.app.Confirm(m.w, "Delete "+what+"?", what+" will be moved to the Recycle Bin.", "Move to Recycle Bin", true) {
+	if m.S.ConfirmDelete && !m.app.Confirm(m.w, "Delete "+what+"?", what+" will be moved to the "+trashName+".", "Move to "+trashName, true) {
 		return
 	}
 	var full []string
 	for _, n := range names {
 		full = append(full, filepath.Join(p.dir, n))
 	}
-	if err := recycle(m.w.hwnd, full); err != nil {
+	if err := moveToTrash(m.w, full); err != nil {
 		m.opFailed("Delete failed", err)
 	} else {
-		m.log.Add(core.LogSuccess, "Moved %s to the Recycle Bin", what)
+		m.log.Add(core.LogSuccess, "Moved %s to the %s", what, trashName)
 	}
 	p.refresh()
 }
@@ -471,31 +469,6 @@ func removeRemoteTree(fs remote.FS, dir string, log *core.Log) error {
 		}
 	}
 	return fs.Rmdir(dir)
-}
-
-// recycle moves files to the Recycle Bin.
-func recycle(hwnd uintptr, paths []string) error {
-	var buf []uint16
-	for _, p := range paths {
-		u, _ := syscall.UTF16FromString(p)
-		buf = append(buf, u...)
-	}
-	buf = append(buf, 0)
-	op := struct {
-		Hwnd    uintptr
-		Func    uint32
-		From    *uint16
-		To      *uint16
-		Flags   uint16
-		Aborted int32
-		Maps    uintptr
-		Title   *uint16
-	}{Hwnd: hwnd, Func: 3 /*FO_DELETE*/, From: &buf[0], Flags: 0x40 | 0x10 | 0x4 /*ALLOWUNDO|NOCONFIRMATION|SILENT*/}
-	r, _, _ := pSHFileOperationW.Call(uintptr(unsafe.Pointer(&op)))
-	if r != 0 {
-		return fmt.Errorf("Windows could not delete the item (error %d)", r)
-	}
-	return nil
 }
 
 func (m *MainWindow) chmodSelected() {
@@ -591,7 +564,7 @@ func (m *MainWindow) paneContext(p *Pane, x, y int) {
 					if one {
 						t = m.sess.url(path.Join(p.dir, sel[0].Name))
 					}
-					setClipboardText(m.w.hwnd, t)
+					setClipboardText(t)
 				}},
 				MenuItem{Label: "Refresh", Shortcut: "F5", Icon: icRefresh, Action: p.refresh},
 			)
@@ -614,9 +587,9 @@ func (m *MainWindow) paneContext(p *Pane, x, y int) {
 			MenuItem{Label: "Rename", Shortcut: "F2", Icon: icRename, Disabled: !one || p.dir == "", Action: func() { m.rename(p) }},
 			MenuItem{Label: "Delete", Shortcut: "Del", Icon: icDelete, Danger: true, Disabled: !any || p.dir == "", Action: func() { m.deleteSelected(p) }},
 			Sep,
-			MenuItem{Label: "Show in Explorer", Icon: icFolder, Disabled: p.dir == "", Action: func() {
+			MenuItem{Label: "Show in " + fileManagerName, Icon: icFolder, Disabled: p.dir == "", Action: func() {
 				if one {
-					pShellExecuteW.Call(0, up("open"), up("explorer.exe"), up("/select,\""+p.childPath(sel[0].Name)+"\""), 0, SW_SHOWNORMAL)
+					revealInFileManager(p.childPath(sel[0].Name))
 				} else {
 					shellOpen(p.dir)
 				}
@@ -626,7 +599,7 @@ func (m *MainWindow) paneContext(p *Pane, x, y int) {
 				if one {
 					t = p.childPath(sel[0].Name)
 				}
-				setClipboardText(m.w.hwnd, t)
+				setClipboardText(t)
 			}},
 			MenuItem{Label: "Refresh", Shortcut: "F5", Icon: icRefresh, Action: p.refresh},
 		)

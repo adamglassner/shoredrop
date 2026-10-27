@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 package ui
 
@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unsafe"
 
 	"shoredrop/internal/core"
 	"shoredrop/internal/remote"
@@ -211,7 +210,7 @@ func newMainWindow(a *App, s *core.Settings) *MainWindow {
 	m.w = w
 	a.main = w
 	w.MinW, w.MinH = 980, 640
-	pDragAcceptFiles.Call(w.hwnd, 1)
+	w.acceptFileDrops()
 
 	m.btnMin = &Button{Base: Base{W: w}, Icon: icMin, Style: BtnChrome, OnClick: w.Minimize}
 	m.btnMax = &Button{Base: Base{W: w}, Icon: icMax, Style: BtnChrome, OnClick: w.ToggleMaximize}
@@ -266,7 +265,7 @@ func newMainWindow(a *App, s *core.Settings) *MainWindow {
 	m.logView.OnContext = func(x, y int) {
 		sx, sy := w.ScreenPos(x, y)
 		a.ShowMenu(w, []MenuItem{
-			{Label: "Copy log", Icon: icCopy, Action: func() { setClipboardText(w.hwnd, m.logView.Text()) }},
+			{Label: "Copy log", Icon: icCopy, Action: func() { setClipboardText(m.logView.Text()) }},
 			{Label: "Clear log", Icon: icClear, Action: m.log.Clear},
 		}, sx, sy, 0, nil)
 	}
@@ -316,6 +315,9 @@ func newMainWindow(a *App, s *core.Settings) *MainWindow {
 	w.Add(m.splitV, m.splitH)
 
 	m.buildMenus()
+	if nativeMenuBar {
+		m.setupNativeMenus()
+	}
 	w.Layout = m.layout
 	w.PaintBg = m.paint
 	w.Overlay = m.paintOverlay
@@ -397,11 +399,18 @@ func (m *MainWindow) layout() {
 	m.btnClose.SetBounds(Rect{W - cw, 0, cw, ch})
 	m.btnMax.SetBounds(Rect{W - 2*cw, 0, cw, ch})
 	m.btnMin.SetBounds(Rect{W - 3*cw, 0, cw, ch})
+	for _, b := range []*Button{m.btnClose, m.btnMax, m.btnMin} {
+		b.Show(!nativeChrome)
+	}
 	m.btnGear.SetBounds(Rect{W - S(16) - S(36), S(38), S(36), S(30)})
 	m.btnTheme.SetBounds(Rect{W - S(16) - S(78), S(38), S(36), S(30)})
 
 	m.rMenu = Rect{0, headerH, W, S(34)}
+	if nativeMenuBar {
+		m.rMenu.H = 0 // the menus are in the macOS menu bar
+	}
 	m.menuBar.SetBounds(m.rMenu)
+	m.menuBar.Show(!nativeMenuBar)
 	x := S(14)
 	for _, d := range m.menus {
 		tw := w.F.Menu.Measure(d.title) + S(24)
@@ -517,8 +526,19 @@ func (m *MainWindow) paint(c *Canvas) {
 	S := w.S
 	// header
 	ls := S(50)
-	drawBrand(c, w, S(22), (m.rHeader.H-ls)/2+S(2), ls, "v"+core.AppVersion, false)
+	drawBrand(c, w, w.ChromeL+S(22), (m.rHeader.H-ls)/2+S(2), ls, "v"+core.AppVersion, false)
 	// menu bar
+	if nativeMenuBar {
+		c.FillRect(Rect{0, m.rMenu.Y, w.w, 1}, p.Border)
+	} else {
+		m.paintMenuBar(c)
+	}
+	m.paintBody(c)
+}
+
+func (m *MainWindow) paintMenuBar(c *Canvas) {
+	p := c.P
+	w := m.w
 	c.FillRect(Rect{0, m.rMenu.Y, w.w, m.rMenu.H}, p.Surface2)
 	c.FillRect(Rect{0, m.rMenu.Y, w.w, 1}, p.Border)
 	c.FillRect(Rect{0, m.rMenu.Y + m.rMenu.H - 1, w.w, 1}, p.Border)
@@ -532,6 +552,12 @@ func (m *MainWindow) paint(c *Canvas) {
 		}
 		c.Text(d.title, w.F.Menu, fg, d.rect, AlignCenter)
 	}
+}
+
+func (m *MainWindow) paintBody(c *Canvas) {
+	p := c.P
+	w := m.w
+	S := w.S
 	// quick connect / session panel
 	r := m.rQC
 	c.FillRound(r, c.S(10), p.Surface)
@@ -739,7 +765,7 @@ func (m *MainWindow) fileMenu() []MenuItem {
 		Sep,
 		{Label: "New Folder", Shortcut: "F7", Icon: icFolderAdd, Action: func() { m.newFolder(m.active) }},
 		{Label: "Rename", Shortcut: "F2", Icon: icRename, Action: func() { m.rename(m.active) }},
-		{Label: "Delete", Shortcut: "Del", Icon: icDelete, Action: func() { m.deleteSelected(m.active) }},
+		{Label: "Delete", Shortcut: "Del", Icon: icDelete, Action: m.deleteCommand},
 		{Label: "Change Permissions…", Icon: icPermissions, Disabled: !m.connected(), Action: m.chmodSelected},
 		Sep,
 		{Label: "Settings…", Shortcut: "Ctrl+,", Icon: icSettings, Action: m.openSettings},
@@ -815,24 +841,8 @@ func (m *MainWindow) helpMenu() []MenuItem {
 
 func (m *MainWindow) showShortcuts() {
 	m.app.Message(m.w, MessageOpts{Kind: MsgInfo, Title: "Keyboard Shortcuts", Heading: "Keyboard shortcuts",
-		Text: "Shortcuts work from the file lists; most also work while typing in a box.",
-		Detail: "F5 / Ctrl+R    Refresh\n" +
-			"Ctrl+U         Upload selected\n" +
-			"Ctrl+D         Download selected\n" +
-			"F2             Rename\n" +
-			"Del            Delete\n" +
-			"F7             New folder\n" +
-			"Backspace      Up one level\n" +
-			"Alt+← / Alt+→  Back / Forward\n" +
-			"Ctrl+L         Type a path\n" +
-			"Ctrl+F         Filter files\n" +
-			"Ctrl+S         Site Manager\n" +
-			"Ctrl+Q         Quick Connect\n" +
-			"Ctrl+W         Disconnect\n" +
-			"Ctrl+Y         Synchronized browsing\n" +
-			"Ctrl+P         Pause all transfers\n" +
-			"Ctrl+T         Toggle light / dark\n" +
-			"Ctrl+,         Settings"})
+		Text:   "Shortcuts work from the file lists; most also work while typing in a box.",
+		Detail: shortcutHelp})
 }
 
 func (m *MainWindow) protocolMenu() {
@@ -874,7 +884,7 @@ func (m *MainWindow) sessionMenu() {
 		Sep,
 		{Label: "Save to Site Manager…", Icon: icSave, Action: m.saveSessionAsSite},
 		{Label: "Copy server address", Icon: icCopy, Action: func() {
-			setClipboardText(m.w.hwnd, m.sess.url(m.remote.dir))
+			setClipboardText(m.sess.url(m.remote.dir))
 		}},
 	}
 	sx, sy := m.w.ScreenPos(m.sessPill.R.X, m.sessPill.R.Y+m.sessPill.R.H+m.w.S(6))
@@ -895,9 +905,23 @@ func (m *MainWindow) onKey(e *KeyEvent) bool {
 		m.drag.from.list.CancelDrag()
 		return true
 	}
-	if e.Alt && !e.Ctrl {
+	if nativeMenuBar && e.Ctrl && !e.FromEdit {
+		// Finder-style navigation: ⌘[ ⌘] ⌘↑
+		switch e.VK {
+		case VK_OEM_4:
+			m.active.back()
+			return true
+		case VK_OEM_6:
+			m.active.forward()
+			return true
+		case VK_UP:
+			m.active.up()
+			return true
+		}
+	}
+	if e.Alt && !e.Ctrl && !(nativeMenuBar && e.FromEdit) {
 		for i, d := range m.menus {
-			if e.VK == d.key {
+			if e.VK == d.key && !nativeMenuBar {
 				m.openMenu(i)
 				return true
 			}
@@ -915,7 +939,7 @@ func (m *MainWindow) onKey(e *KeyEvent) bool {
 		}
 		return false
 	}
-	if e.VK == VK_F10 {
+	if e.VK == VK_F10 && !nativeMenuBar {
 		m.openMenu(0)
 		return true
 	}
@@ -992,6 +1016,10 @@ func (m *MainWindow) onKey(e *KeyEvent) bool {
 	case VK_F7:
 		m.newFolder(m.active)
 	case VK_BACK:
+		if qv, ok := m.w.focus.(*QueueView); ok && nativeMenuBar {
+			qv.Q.Remove(qv.Selected()...) // ⌫ is the Mac delete key
+			return true
+		}
 		m.active.up()
 	case VK_APPS:
 		r := m.active.list.R
@@ -1000,6 +1028,16 @@ func (m *MainWindow) onKey(e *KeyEvent) bool {
 		return false
 	}
 	return true
+}
+
+// deleteCommand deletes the selection in the focused list: queue entries if
+// the transfer queue has focus, otherwise files in the active pane.
+func (m *MainWindow) deleteCommand() {
+	if qv, ok := m.w.focus.(*QueueView); ok {
+		qv.Q.Remove(qv.Selected()...)
+		return
+	}
+	m.deleteSelected(m.active)
 }
 
 func (m *MainWindow) toggleHidden() {
@@ -1025,14 +1063,7 @@ func (m *MainWindow) onClose() bool {
 		}
 		m.q.CancelAll()
 	}
-	var wp WINDOWPLACEMENT
-	wp.Length = uint32(unsafe.Sizeof(wp))
-	pGetWindowPlacement.Call(m.w.hwnd, uintptr(unsafe.Pointer(&wp)))
-	nr := wp.NormalPosition
-	m.S.Window.X, m.S.Window.Y = int(nr.Left), int(nr.Top)
-	m.S.Window.W = int(float64(nr.Right-nr.Left) / m.w.scale)
-	m.S.Window.H = int(float64(nr.Bottom-nr.Top) / m.w.scale)
-	m.S.Window.Maximized = m.w.Maximized()
+	m.w.savePlacement(&m.S.Window)
 	if m.local.dir != "" {
 		m.S.LastLocalDir = m.local.dir
 	}
@@ -1051,26 +1082,8 @@ func (m *MainWindow) onClose() bool {
 }
 
 func (m *MainWindow) show() {
-	ws := m.S.Window
-	if ws.X != 0 || ws.Y != 0 {
-		var wp WINDOWPLACEMENT
-		wp.Length = uint32(unsafe.Sizeof(wp))
-		pGetWindowPlacement.Call(m.w.hwnd, uintptr(unsafe.Pointer(&wp)))
-		wp.NormalPosition = RECT{int32(ws.X), int32(ws.Y), int32(ws.X + m.w.S(ws.W)), int32(ws.Y + m.w.S(ws.H))}
-		wp.ShowCmd = SW_SHOWNORMAL
-		pSetWindowPlacement.Call(m.w.hwnd, uintptr(unsafe.Pointer(&wp)))
-	} else {
-		// centre on the primary work area
-		x, y, W, H := m.w.centerSize(nil, ws.W, ws.H)
-		pSetWindowPos.Call(m.w.hwnd, 0, uintptr(x), uintptr(y), uintptr(W), uintptr(H), SWP_NOZORDER)
-	}
-	if ws.Maximized {
-		pShowWindow.Call(m.w.hwnd, SW_MAXIMIZE)
-	} else {
-		pShowWindow.Call(m.w.hwnd, SW_SHOW)
-	}
+	m.w.showPlaced(m.S.Window)
 	m.layout()
-	pUpdateWindow.Call(m.w.hwnd)
 	if m.S.LastHost == "" {
 		m.w.SetFocusWidget(m.qcHost)
 	} else {

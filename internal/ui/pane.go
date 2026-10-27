@@ -1,15 +1,12 @@
-//go:build windows
+//go:build windows || darwin
 
 package ui
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
-	"unsafe"
 
 	"shoredrop/internal/core"
 	"shoredrop/internal/remote"
@@ -127,7 +124,7 @@ func (p *Pane) title() (string, string) {
 		return "Remote — " + p.dir, sub
 	}
 	if p.dir == "" {
-		return "Local — This PC", "Drives"
+		return "Local — " + drivesName, drivesSub
 	}
 	name := filepath.Base(p.dir)
 	if len(p.dir) <= 3 {
@@ -181,7 +178,7 @@ func (p *Pane) paint(c *Canvas) {
 
 func (p *Pane) displayPath() string {
 	if !p.isRemote && p.dir == "" {
-		return "This PC"
+		return drivesName
 	}
 	return p.dir
 }
@@ -201,7 +198,7 @@ func (p *Pane) showDisconnected() {
 	p.hist, p.fut = nil, nil
 	p.list.SetRows(nil)
 	p.list.EmptyText = "Not connected"
-	p.list.EmptySub = "Enter a host above and press Connect, or open the Site Manager (Ctrl+S)."
+	p.list.EmptySub = "Enter a host above and press Connect, or open the Site Manager (" + siteManagerKey + ")."
 	p.path.SetText("")
 	p.updateButtons()
 	p.w.Invalidate()
@@ -410,160 +407,4 @@ func (p *Pane) open(r FileRow) {
 			p.m.uploadRows(p.list.Selected(), p.m.remote.dir)
 		}
 	}
-}
-
-// ---------------------------------------------------------------- local file system
-
-func listLocal(dir string, showHidden bool) ([]FileRow, error) {
-	if dir == "" {
-		return drives(), nil
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	rows := []FileRow{{Name: "..", IsParent: true, IsDir: true}}
-	for _, e := range entries {
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		hidden := false
-		if d, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
-			hidden = d.FileAttributes&(syscall.FILE_ATTRIBUTE_HIDDEN|syscall.FILE_ATTRIBUTE_SYSTEM) != 0
-		}
-		if strings.HasPrefix(e.Name(), "$") {
-			hidden = true
-		}
-		if hidden && !showHidden {
-			continue
-		}
-		mode := info.Mode()
-		isDir := mode.IsDir()
-		isLink := mode&os.ModeSymlink != 0
-		if isLink {
-			if st, err := os.Stat(filepath.Join(dir, e.Name())); err == nil {
-				isDir = st.IsDir()
-			}
-		}
-		rows = append(rows, FileRow{Name: e.Name(), Size: info.Size(), ModTime: info.ModTime(), IsDir: isDir, IsLink: isLink,
-			Perm: localPerm(mode, isDir), Hidden: hidden})
-	}
-	return rows, nil
-}
-
-func localPerm(m os.FileMode, dir bool) string {
-	b := []byte("-rw-rw-rw-")
-	if m&0o200 == 0 {
-		b[2], b[5], b[8] = '-', '-', '-'
-	}
-	if dir {
-		b[0] = 'd'
-		b[3], b[6], b[9] = 'x', 'x', 'x'
-	}
-	return string(b)
-}
-
-func drives() []FileRow {
-	mask, _, _ := pGetLogicalDrives.Call()
-	var rows []FileRow
-	for i := 0; i < 26; i++ {
-		if mask&(1<<uint(i)) == 0 {
-			continue
-		}
-		root := string(rune('A'+i)) + `:\`
-		t, _, _ := pGetDriveTypeW.Call(up(root))
-		if t == 1 /*NO_ROOT_DIR*/ {
-			continue
-		}
-		rows = append(rows, FileRow{Name: root, IsDir: true, IsDrive: true, Perm: driveLabel(root, t)})
-	}
-	return rows
-}
-
-func driveLabel(root string, t uintptr) string {
-	buf := make([]uint16, 64)
-	pGetVolumeInfoW.Call(up(root), uintptr(unsafe.Pointer(&buf[0])), 64, 0, 0, 0, 0, 0)
-	if l := syscall.UTF16ToString(buf); l != "" {
-		return l
-	}
-	switch t {
-	case 2:
-		return "Removable"
-	case 4:
-		return "Network"
-	case 5:
-		return "CD/DVD"
-	}
-	return "Local Disk"
-}
-
-func parentLocal(dir string) (string, bool) {
-	if dir == "" {
-		return "", false
-	}
-	clean := filepath.Clean(dir)
-	if len(clean) <= 3 && strings.HasSuffix(clean, `:\`) || len(clean) == 2 && clean[1] == ':' {
-		return "", true // drive root → This PC
-	}
-	if strings.HasPrefix(clean, `\\`) {
-		// UNC: \\server\share is the top
-		parts := strings.Split(strings.TrimPrefix(clean, `\\`), `\`)
-		if len(parts) <= 2 {
-			return "", true
-		}
-	}
-	par := filepath.Dir(clean)
-	if par == clean {
-		return "", true
-	}
-	return par, true
-}
-
-func normalizeLocal(input, cur string) string {
-	t := strings.Trim(strings.TrimSpace(input), `"`)
-	if t == "" || strings.EqualFold(t, "This PC") {
-		return ""
-	}
-	if strings.HasPrefix(t, "~") {
-		home, _ := os.UserHomeDir()
-		t = home + t[1:]
-	}
-	t = expandWinEnv(t)
-	if len(t) == 2 && t[1] == ':' {
-		t += `\`
-	}
-	if !filepath.IsAbs(t) && cur != "" {
-		t = filepath.Join(cur, t)
-	}
-	return filepath.Clean(t)
-}
-
-// expandWinEnv expands %NAME% environment variables.
-func expandWinEnv(s string) string {
-	var b strings.Builder
-	for {
-		i := strings.IndexByte(s, '%')
-		if i < 0 {
-			b.WriteString(s)
-			return b.String()
-		}
-		j := strings.IndexByte(s[i+1:], '%')
-		if j < 0 {
-			b.WriteString(s)
-			return b.String()
-		}
-		name := s[i+1 : i+1+j]
-		if v, ok := os.LookupEnv(name); ok && name != "" {
-			b.WriteString(s[:i])
-			b.WriteString(v)
-		} else {
-			b.WriteString(s[:i+j+2])
-		}
-		s = s[i+j+2:]
-	}
-}
-
-func shellOpen(target string) {
-	pShellExecuteW.Call(0, up("open"), up(target), 0, 0, SW_SHOWNORMAL)
 }

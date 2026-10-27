@@ -1,36 +1,11 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package core
 
-import (
-	"bytes"
-	"os/exec"
-	"runtime"
-	"strings"
-	"sync"
-)
+import "sync"
 
-// On macOS secrets go to the login Keychain via the security tool. On other
-// systems (used only for development and tests) they are kept in memory.
-
-type keychainStore struct{}
-
-func (keychainStore) Set(target, user, secret string) error {
-	return exec.Command("/usr/bin/security", "add-generic-password", "-U", "-s", target, "-a", user, "-w", secret).Run()
-}
-
-func (keychainStore) Get(target string) (string, error) {
-	out, err := exec.Command("/usr/bin/security", "find-generic-password", "-s", target, "-w").Output()
-	if err != nil {
-		return "", ErrNoCredential
-	}
-	return strings.TrimRight(string(bytes.TrimRight(out, "\n")), "\r"), nil
-}
-
-func (keychainStore) Delete(target string) error {
-	exec.Command("/usr/bin/security", "delete-generic-password", "-s", target).Run()
-	return nil
-}
+// On Linux and other systems (used only for development and tests) secrets
+// are kept in memory.
 
 type memStore struct {
 	mu sync.Mutex
@@ -60,17 +35,7 @@ func (s *memStore) Delete(target string) error {
 }
 
 // Credentials is the platform credential store.
-var Credentials CredStore = func() CredStore {
-	if runtime.GOOS == "darwin" {
-		return keychainStore{}
-	}
-	return &memStore{m: map[string]string{}}
-}()
+var Credentials CredStore = &memStore{m: map[string]string{}}
 
 // CredentialStoreName is shown in the UI.
-var CredentialStoreName = func() string {
-	if runtime.GOOS == "darwin" {
-		return "macOS Keychain"
-	}
-	return "in-memory store"
-}()
+const CredentialStoreName = "in-memory store"

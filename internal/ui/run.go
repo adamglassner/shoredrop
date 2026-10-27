@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 package ui
 
@@ -11,8 +11,6 @@ import (
 
 	"shoredrop/internal/core"
 )
-
-var pMessageBoxW = user32.NewProc("MessageBoxW")
 
 // reportPanic records an unexpected error to crash.log in the settings folder.
 func reportPanic(where string, r any) {
@@ -30,8 +28,8 @@ func Run() {
 	defer func() {
 		if r := recover(); r != nil {
 			reportPanic("main", r)
-			pMessageBoxW.Call(0, up(fmt.Sprintf("ShoreDrop hit an unexpected error and needs to close.\n\n%v\n\nDetails were saved to %s", r,
-				filepath.Join(core.ConfigDir(), "crash.log"))), up("ShoreDrop"), 0x10)
+			showFatal(fmt.Sprintf("ShoreDrop hit an unexpected error and needs to close.\n\n%v\n\nDetails were saved to %s", r,
+				filepath.Join(core.ConfigDir(), "crash.log")))
 		}
 	}()
 	s := core.LoadSettings()

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin
 
 package ui
 
@@ -302,9 +302,9 @@ func (sd *settingsDlg) layout(body Rect) {
 		add("Default upload folder (remote)", "Folder the remote pane opens after connecting, unless the site sets one", sd.upDir, rw, true)
 		add("When a file already exists", "", sd.exists, S(330), true)
 		add("Confirm before deleting", "", sd.confirm, S(48), false)
-		add("Show hidden files", "Files starting with a dot, and hidden Windows files", sd.hidden, S(48), false)
+		add("Show hidden files", hiddenFilesHint, sd.hidden, S(48), false)
 	case 3:
-		add("Theme", "Choose light, dark, or follow the Windows setting. The choice is remembered.", sd.theme2, S(420), true)
+		add("Theme", "Choose light, dark, or follow the "+osName+" setting. The choice is remembered.", sd.theme2, S(420), true)
 	case 4:
 		add("Warn before connecting with plain FTP", "Plain FTP sends passwords and files unencrypted", sd.warnFTP, S(48), false)
 		y += S(100)
