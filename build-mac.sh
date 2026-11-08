@@ -14,6 +14,8 @@ OUT=build/mac
 mkdir -p "$OUT"
 
 export CGO_ENABLED=1 GOOS=darwin GOARCH=arm64
+# keep every object (including the Go runtime's cgo parts) runnable on macOS 11
+export MACOSX_DEPLOYMENT_TARGET=11.0
 if [ "$(uname -s)" != "Darwin" ]; then
 	: "${MACOS_SDK:?set MACOS_SDK to a macOS SDK folder to cross-compile}"
 	export CC="clang -target arm64-apple-macos11 -isysroot $MACOS_SDK -fuse-ld=lld -Wno-unused-command-line-argument"
