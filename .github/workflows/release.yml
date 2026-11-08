@@ -17,6 +17,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -102,7 +106,7 @@ jobs:
           if-no-files-found: ignore
 
   macos:
-    runs-on: macos-14 # Apple Silicon
+    runs-on: macos-latest # Apple Silicon
     steps:
       - uses: actions/checkout@v4
 
@@ -150,13 +154,16 @@ jobs:
           if-no-files-found: ignore
 
   release:
+    # The Windows build gates the release; the macOS zip is added when the
+    # macOS job ran (macOS runners aren't available to every private repo).
     needs: [windows, macos]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: always() && needs.windows.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: '{windows,macos}'
           merge-multiple: true
 
       - name: Publish GitHub Release
@@ -166,17 +173,23 @@ jobs:
           V: ${{ needs.windows.outputs.version }}
         run: |
           set -e
-          files="dist/ShoreDrop-Setup.exe dist/ShoreDrop.exe dist/ShoreDrop-$V-win-x64.zip dist/ShoreDrop-$V-macOS-arm64.zip"
+          files="dist/ShoreDrop-Setup.exe dist/ShoreDrop.exe dist/ShoreDrop-$V-win-x64.zip"
+          mac="dist/ShoreDrop-$V-macOS-arm64.zip"
+          if [ -f "$mac" ]; then files="$files $mac"; fi
           ls -l $files
           notes="ShoreDrop $V — FTP, FTPS and SFTP client.
 
           **Windows 10/11 (x64)**
           - **ShoreDrop-Setup.exe**: installer (Start menu + desktop shortcuts, uninstaller; no admin rights needed).
           - **ShoreDrop.exe**: portable app, runs from anywhere.
-          - **ShoreDrop-$V-win-x64.zip**: the portable app zipped (used by the Bytehawk Studio Launcher).
+          - **ShoreDrop-$V-win-x64.zip**: the portable app zipped (used by the Bytehawk Studio Launcher)."
+          if [ -f "$mac" ]; then
+            notes="$notes
 
           **macOS 11+ (Apple Silicon)**
-          - **ShoreDrop-$V-macOS-arm64.zip**: unzip and drag ShoreDrop.app to Applications. The app is not notarized: allow it once in System Settings › Privacy & Security › Open Anyway, or run \`xattr -dr com.apple.quarantine /Applications/ShoreDrop.app\`.
+          - **ShoreDrop-$V-macOS-arm64.zip**: unzip and drag ShoreDrop.app to Applications. The app is not notarized: allow it once in System Settings › Privacy & Security › Open Anyway, or run \`xattr -dr com.apple.quarantine /Applications/ShoreDrop.app\`."
+          fi
+          notes="$notes
 
           Built from ${GITHUB_SHA::7}."
           if gh release view "v$V" >/dev/null 2>&1; then
