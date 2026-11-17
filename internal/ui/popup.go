@@ -139,3 +139,7 @@ func ifc(cond bool, a, b Color) Color {
 var menuNav func(right bool)
 
 var lastMenuClose time.Time
+
+// closeActiveMenu, while a custom-drawn popup menu is open, closes it without
+// choosing anything (used to switch between menu-bar menus on hover).
+var closeActiveMenu func()

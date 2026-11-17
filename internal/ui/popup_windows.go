@@ -65,6 +65,7 @@ func (a *App) ShowMenu(owner *Window, items []MenuItem, sx, sy, minW int, onClos
 			return
 		}
 		closed = true
+		closeActiveMenu = nil
 		pw.OnActivate = nil
 		pw.destroy()
 		lastMenuClose = time.Now()
@@ -76,6 +77,7 @@ func (a *App) ShowMenu(owner *Window, items []MenuItem, sx, sy, minW int, onClos
 		}
 	}
 	mv.choose = func(i int) { finish(items[i].Action) }
+	closeActiveMenu = func() { finish(nil) }
 	pw.Add(mv)
 	pw.Layout = func() { mv.SetBounds(Rect{0, 0, pw.w, pw.h}) }
 	pw.OnActivate = func(active bool) {

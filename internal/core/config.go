@@ -14,7 +14,7 @@ import (
 
 const (
 	AppName    = "ShoreDrop"
-	AppVersion = "1.0.0"
+	AppVersion = "1.0.1"
 )
 
 // WindowState remembers the main window layout.

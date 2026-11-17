@@ -177,6 +177,12 @@ func (mb *menuBarWidget) OnMouse(e *MouseEvent) bool {
 			m.menuHover = idx
 			m.w.Invalidate()
 		}
+		// like any Windows menu bar: while one menu is open, pointing at
+		// another title switches to that menu without clicking
+		if idx >= 0 && m.menuOpen >= 0 && idx != m.menuOpen && closeActiveMenu != nil {
+			closeActiveMenu()
+			m.openMenu(idx)
+		}
 	case MouseLeave:
 		m.menuHover = -1
 		m.w.Invalidate()

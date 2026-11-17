@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-const clientVersion = "SSH-2.0-ShoreDrop_1.0.0"
+const clientVersion = "SSH-2.0-ShoreDrop_1.0.1"
 
 // HostKeyCallback decides whether to trust the server's host key. blob is
 // the raw public key; it is called only during the first key exchange.

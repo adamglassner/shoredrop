@@ -9,7 +9,7 @@
 #   with rcodesign (https://github.com/indygreg/apple-platform-rs) if found.
 set -e
 cd "$(dirname "$0")"
-VERSION=1.0.0
+VERSION=1.0.1
 OUT=build/mac
 mkdir -p "$OUT"
 

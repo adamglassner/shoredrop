@@ -90,6 +90,64 @@ jobs:
           $summary += "- Silent uninstall`n"
           $summary >> $env:GITHUB_STEP_SUMMARY
 
+      - name: Menu bar test (pointing at another menu switches menus)
+        shell: pwsh
+        run: |
+          Add-Type @"
+          using System;
+          using System.Text;
+          using System.Runtime.InteropServices;
+          public static class U {
+            public delegate bool EnumProc(IntPtr h, IntPtr l);
+            [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc f, IntPtr l);
+            [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+            [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+            [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+            [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+            [DllImport("user32.dll")] public static extern void mouse_event(int f, int x, int y, int d, IntPtr e);
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+            [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+            [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+            public static int PopupLeft() {
+              int left = -1;
+              EnumWindows((h, l) => {
+                var sb = new StringBuilder(64);
+                GetClassName(h, sb, 64);
+                if (sb.ToString() == "ShoreDropPopup" && IsWindowVisible(h)) { RECT r; GetWindowRect(h, out r); left = r.L; }
+                return true;
+              }, IntPtr.Zero);
+              return left;
+            }
+          }
+          "@
+          $data = Join-Path $env:APPDATA 'ShoreDrop'
+          @{ theme = 'light' } | ConvertTo-Json | Set-Content (Join-Path $data 'settings.json')
+          $p = Start-Process build/ShoreDrop.exe -PassThru
+          Start-Sleep -Seconds 6
+          $p.Refresh()
+          $h = $p.MainWindowHandle
+          [U]::SetForegroundWindow($h) | Out-Null
+          Start-Sleep -Milliseconds 500
+          $o = New-Object U+POINT
+          [U]::ClientToScreen($h, [ref]$o) | Out-Null
+          $y = $o.Y + 89
+          # click "File"
+          [U]::SetCursorPos($o.X + 30, $y) | Out-Null
+          Start-Sleep -Milliseconds 200
+          [U]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 80; [U]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)
+          Start-Sleep -Milliseconds 700
+          $first = [U]::PopupLeft()
+          # glide right onto "View" without clicking
+          for ($dx = 30; $dx -le 92; $dx += 4) { [U]::SetCursorPos($o.X + $dx, $y) | Out-Null; Start-Sleep -Milliseconds 25 }
+          Start-Sleep -Milliseconds 700
+          $second = [U]::PopupLeft()
+          Stop-Process -Id $p.Id -Force
+          Write-Host "File menu popup at x=$first, after pointing at View x=$second"
+          if ($first -lt 0) { throw 'Clicking File did not open a menu' }
+          if ($second -le $first) { throw 'Pointing at View did not switch to the View menu' }
+          "- Menu bar: File menu opened at x=$first, hovering View switched it to x=$second" >> $env:GITHUB_STEP_SUMMARY
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows

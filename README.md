@@ -1,4 +1,4 @@
-# ShoreDrop 1.0.0
+# ShoreDrop 1.0.1
 
 A modern FTP, FTPS and SFTP client for Windows and macOS (Apple Silicon) with a
 dual-pane browser, transfer queue, site manager, synchronized browsing and full
@@ -28,7 +28,7 @@ certificate removes this; see below.)
 
 ## Install on macOS (Apple Silicon, macOS 11 Big Sur or later)
 
-1. Unzip **ShoreDrop-1.0.0-macOS-arm64.zip** and drag **ShoreDrop.app** into **Applications**.
+1. Unzip **ShoreDrop-1.0.1-macOS-arm64.zip** and drag **ShoreDrop.app** into **Applications**.
 2. The app is ad-hoc signed, not notarized by Apple, so the first launch is blocked.
    Allow it once, either way:
    - **System Settings › Privacy & Security**, scroll down to "ShoreDrop was blocked…"
@@ -70,7 +70,7 @@ On a Mac (Apple Silicon) with Go 1.24+ and the Xcode Command Line Tools
 ```
 
 This writes `build/mac/ShoreDrop.app` (ad-hoc signed with `codesign`) and
-`build/ShoreDrop-1.0.0-macOS-arm64.zip`.
+`build/ShoreDrop-1.0.1-macOS-arm64.zip`.
 
 The same script cross-compiles from Linux with clang/lld and a macOS SDK:
 `MACOS_SDK=/path/to/MacOSX14.5.sdk ./build-mac.sh` (it signs with

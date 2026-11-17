@@ -31,7 +31,7 @@ func main() {
 	name := flag.String("name", "ShoreDrop", "product name")
 	desc := flag.String("desc", "ShoreDrop", "file description")
 	file := flag.String("file", "ShoreDrop.exe", "original file name")
-	version := flag.String("version", "1.0.0", "version x.y.z")
+	version := flag.String("version", "1.0.1", "version x.y.z")
 	flag.Parse()
 
 	var images [][]byte

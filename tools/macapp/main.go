@@ -63,7 +63,7 @@ func main() {
 	bin := flag.String("bin", "", "macOS executable")
 	icns := flag.String("icns", "", ".icns icon")
 	out := flag.String("out", "ShoreDrop.app", "bundle to create")
-	version := flag.String("version", "1.0.0", "version")
+	version := flag.String("version", "1.0.1", "version")
 	zipOut := flag.String("zip", "", "pack the bundle given by -out into this zip instead")
 	flag.Parse()
 

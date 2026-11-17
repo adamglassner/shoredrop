@@ -11,7 +11,7 @@ type Fonts struct {
 	Title                    *Font // pane titles
 	H1                       *Font // dialog headings
 	Brand                    *Font // "ShoreDrop"
-	BrandSub                 *Font // "v1.0.0", "Site Manager"
+	BrandSub                 *Font // "v1.0.1", "Site Manager"
 	Mono                     *Font
 	Icon, IconSmall, IconBig *Font
 	Menu                     *Font
